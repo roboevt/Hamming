@@ -1,11 +1,9 @@
-#include <bitset>
 #include <iostream>
 #include <numeric>
 #include <sstream>
-#include <vector>
+#include <bitset>
 
-using namespace std;
-
+namespace hamming {
 /*
 31,26 hamming code (83.9% data)
 
@@ -17,9 +15,12 @@ p = group parity
 x = total parity
 */
 
-uint32_t setupData(uint32_t data) {
+/// @brief Expand input to leave space for parity bits
+/// @param data An at most 26 bit number
+/// @return A 31 bit number with 0s in the parity locations.
+uint32_t expandData(uint32_t data) {
     if (data > (1 << 26)) {
-        cout << "Message does not fit within data bits" << endl;
+        std::cout << "Message does not fit within data bits" << std::endl;
         return -1;  // ~0
     }
     uint32_t result = 0;
@@ -32,6 +33,9 @@ uint32_t setupData(uint32_t data) {
     return result;
 }
 
+/// @brief Check a number and return which parity bits should be set
+/// @param data 
+/// @return 
 uint32_t check(uint32_t data) {
     uint32_t result = 0;
     for (int i = 0; i < sizeof(uint32_t) * __CHAR_BIT__; i++) {
@@ -46,11 +50,15 @@ uint32_t check(uint32_t data) {
 uint32_t encode(uint32_t data) {
     uint32_t correction = check(data);
 
-    if(correction) {
-        data ^= (1 << correction);
+    for(int i = 0; i < 5; i++) {
+        if (correction & 1) {
+            data ^= 1 << (1 << i);
+        }
+        correction >>= 1;
     }
     return data;
 }
+}  // namespace hamming
 
 template <typename T>
 static std::string toBinaryString(const T& x) {
@@ -62,13 +70,13 @@ static std::string toBinaryString(const T& x) {
 auto main() -> int {
     srand(time(0));
     uint32_t message = rand() >> ((sizeof(uint32_t) * __CHAR_BIT__) - 26);
-    uint32_t data = setupData(message);
-    uint32_t correction = check(data);
-    uint32_t result = encode(data);
-    uint32_t zero = check(result);
+    uint32_t data = hamming::expandData(message);
+    uint32_t correction = hamming::check(data);
+    uint32_t result = hamming::encode(data);
+    uint32_t zero = hamming::check(result);
     std::cout << "Message:\t" << toBinaryString(message)
-              << "\nData:\t\t" << toBinaryString(data) 
-              << "\nCorrection:\t" << toBinaryString(correction) 
-              << "\nResult:\t\t" << toBinaryString(result) 
-              << "\nZero:\t\t" << toBinaryString(zero) << std::endl;
+              << "\nData:\t\t" << toBinaryString(data)
+              << "\nCorrection:\t" << toBinaryString(correction)
+              << "\nResult:\t\t" << toBinaryString(result)
+              << "\nZero:\t\t" << zero << std::endl;
 }
