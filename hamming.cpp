@@ -18,24 +18,24 @@ x = total parity
 /// @brief Expand input to leave space for parity bits
 /// @param data An at most 26 bit number
 /// @return A 31 bit number with 0s in the parity locations.
-uint32_t expandData(uint32_t data) {
+uint32_t expand(uint32_t data) {
     if (data > (1 << 26)) {
         std::cout << "Message does not fit within data bits" << std::endl;
         return -1;  // ~0
     }
     uint32_t result = 0;
 
-    result |= (data & 1) << 3;
-    result |= (data & 0b0111) << 5;
-    result |= (data & 0b00001111111) << 9;
-    result |= (data & 0b00000000000111111111111111) << 17;
+    result |= (data & 0b00000000000000000000000000000001) << 3;
+    result |= (data & 0b00000000000000000000000000001110) << 4;
+    result |= (data & 0b00000000000000000000011111110000) << 5;
+    result |= (data & 0b00000011111111111111100000000000) << 6;
 
     return result;
 }
 
 /// @brief Check a number and return which parity bits should be set
-/// @param data 
-/// @return 
+/// @param data Input to analyze
+/// @return Which parity bits should be set
 uint32_t check(uint32_t data) {
     uint32_t result = 0;
     for (int i = 0; i < sizeof(uint32_t) * __CHAR_BIT__; i++) {
@@ -47,7 +47,11 @@ uint32_t check(uint32_t data) {
     return result;
 }
 
-uint32_t encode(uint32_t data) {
+/// @brief Encode an up to 26 bit number using a 31,26 hamming code
+/// @param data Input message
+/// @return Encoded result
+uint32_t encode(uint32_t message) {
+    uint32_t data = expand(message);
     uint32_t correction = check(data);
 
     for(int i = 0; i < 5; i++) {
@@ -58,7 +62,43 @@ uint32_t encode(uint32_t data) {
     }
     return data;
 }
+
+/// @brief Remove parity bits and return just the message
+/// @param data Decoded message with parity bits
+/// @return 26 bit original message
+uint32_t compress(uint32_t data) {
+    uint32_t result = 0;
+
+    result |= (data & 0b00000000000000000000000000001000) >> 3;
+    result |= (data & 0b00000000000000000000000011100000) >> 4;
+    result |= (data & 0b00000000000000001111111000000000) >> 5;
+    result |= (data & 0b11111111111111100000000000000000) >> 6;
+
+    return result;
+}
+
+/// @brief Check if any detectable errors were found in a received message and correct them
+/// @param data Received data
+/// @return Error corrected data with parity bits still present
+uint32_t decode(uint32_t data) {
+    uint32_t correction = check(data);
+    if(correction) {
+        std::cout << "Input requires correction, bit " << correction 
+                  << " was flipped." << std::endl;
+    
+        data ^= (1 << correction);
+    }
+    return data;
+}
 }  // namespace hamming
+
+uint32_t hammingEncode(uint32_t message) {
+    return hamming::encode(hamming::expand(message));
+}
+
+uint32_t hammingDecode(uint32_t message) {
+    return hamming::compress(hamming::decode(message));
+}
 
 template <typename T>
 static std::string toBinaryString(const T& x) {
@@ -69,14 +109,26 @@ static std::string toBinaryString(const T& x) {
 
 auto main() -> int {
     srand(time(0));
+
     uint32_t message = rand() >> ((sizeof(uint32_t) * __CHAR_BIT__) - 26);
-    uint32_t data = hamming::expandData(message);
-    uint32_t correction = hamming::check(data);
-    uint32_t result = hamming::encode(data);
-    uint32_t zero = hamming::check(result);
+    uint32_t expand = hamming::expand(message);
+    uint32_t correction = hamming::check(expand);
+    uint32_t encoded = hamming::encode(message);
+
+    // Simulate random single bit error
+    encoded ^= (1 << rand() % (sizeof(uint32_t) * __CHAR_BIT__));
+
+    uint32_t check = hamming::check(encoded);
+    uint32_t decoded = hamming::decode(encoded);
+    uint32_t received = hamming::compress(decoded);
+
     std::cout << "Message:\t" << toBinaryString(message)
-              << "\nData:\t\t" << toBinaryString(data)
+              << "\nExpand:\t\t" << toBinaryString(expand)
               << "\nCorrection:\t" << toBinaryString(correction)
-              << "\nResult:\t\t" << toBinaryString(result)
-              << "\nZero:\t\t" << zero << std::endl;
+              << "\nEncoded:\t" << toBinaryString(encoded)
+              << "\nCheck:\t\t" << check
+              << "\nDecoded:\t" << toBinaryString(decoded)
+              << "\nReceived:\t" << toBinaryString(received)
+              << "\nMessage received " << (message == received ? 
+                    "successfully!" : "UNsuccessfully :(") << std::endl;
 }
