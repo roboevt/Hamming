@@ -10,7 +10,7 @@ Expand:         00111001011010101011000001100000
 Correction:     00000000000000000000000000001110
 Encoded:        00111001111010101011000101110100
 
-Reception side:
+Reception side (with random bit flip):
 Input requires correction, bit 23 was flipped.
 Check:          23
 Decoded:        00111001011010101011000101110100
