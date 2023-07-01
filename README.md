@@ -1,6 +1,6 @@
 # Hamming
 
-Implementation of a basic channel coding schecme, Hamming codes
+Implementation of a basic channel coding schecme, Hamming codes.
 Many thanks to [this awesome vide](https://www.youtube.com/watch?v=X8jsijhllIA&t=0s) from 3 Blue 1 Brown on Youtube!
 
 Here is an example/demo of the full process:
