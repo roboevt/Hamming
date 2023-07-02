@@ -1,11 +1,15 @@
 #include "hamming.h"
 
-#include <bit>  // popcnt
 #include <algorithm>
+#include <bit>  // popcnt
 #include <chrono>
+#include <fstream>
 #include <vector>
 
 namespace {
+
+constexpr uint32_t LOWER_26 = (1 << 26) - 1;
+
 /// @brief Expand input to leave space for parity bits
 /// @param data An at most 26 bit number
 /// @return A 31 bit number with 0s in the parity locations.
@@ -43,7 +47,7 @@ namespace hamming {
 
 uint32_t check(uint32_t data) {
     uint32_t result = 0;
-    for (int i = 0; i < sizeof(uint32_t) * __CHAR_BIT__; i++) {
+    for (uint64_t i = 0; i < sizeof(uint32_t) * __CHAR_BIT__; i++) {
         if (data & 1) {
             result ^= i;
         }
@@ -63,7 +67,7 @@ uint32_t encode(uint32_t message) {
         correction >>= 1;
     }
 
-    //Extended code
+    // Extended code
     uint_fast8_t parity = std::__popcount(data);
     data |= parity & 1;  // ensure parity is even
 
@@ -76,7 +80,7 @@ uint32_t decode(uint32_t data) {
     if (correction) {
         // std::cout << "Input requires correction, bit " << correction
         //           << " was flipped." << std::endl;
-        if(!(parity & 1)) {
+        if (!(parity & 1)) {
             std::cout << "At least 2 bits flipped, unable to decode" << std::endl;
             return 0;
         }
@@ -120,7 +124,7 @@ uint64_t encode64(uint64_t message) {
         correction >>= 1;
     }
 
-    //Extended code
+    // Extended code
     uint_fast8_t parity = std::__popcount(expanded);
     expanded |= parity & 1;  // ensure parity is even
 
@@ -133,7 +137,7 @@ uint64_t decode64(uint64_t message) {
     if (correction) {
         // std::cout << "Input requires correction, bit " << correction
         //           << " was flipped." << std::endl;
-        if(!(parity & 1)) {
+        if (!(parity & 1)) {
             std::cout << "At least 2 bits flipped, unable to decode" << std::endl;
             return 0;
         }
@@ -150,13 +154,108 @@ uint64_t decode64(uint64_t message) {
     return compressed;
 }
 
-}  // namespace hamming
+void encodeFile(const std::string& input, const std::string& output) {
+    std::ifstream in(input, std::ios::binary);
+    std::ofstream out(output, std::ios::binary);
 
+    if (!in.is_open()) {
+        std::cout << "Unable to open input file" << std::endl;
+        return;
+    }
+    if (!out.is_open()) {
+        std::cout << "Unable to open output file" << std::endl;
+        return;
+    }
+
+    // LCM(26, 32) == 416 bits, which is 16 26-bit words and 13 32-bit words
+    std::array<uint32_t, 13> inBuffer;
+    std::array<uint32_t, 16> outBuffer;
+
+    // Read in 13 32-bit words at a time
+    while (in.read(reinterpret_cast<char*>(inBuffer.data()), sizeof(uint32_t) * inBuffer.size())) {
+        int currentBit = 0;
+
+        uint64_t i = 0;
+        uint64_t o = 0;
+
+        uint32_t firstBlock = inBuffer[i++];
+        while(o < outBuffer.size()) {
+            int startBit = currentBit % (sizeof(uint32_t) * __CHAR_BIT__);
+            int endBit = startBit + 26;
+
+            uint32_t message;
+            if (endBit < 32) {
+                message = (firstBlock >> startBit) & LOWER_26;
+            } else {
+                uint32_t secondBlock = inBuffer[i++];
+                message = (((firstBlock >> startBit) & LOWER_26) | (secondBlock << (32 - startBit))) & LOWER_26;
+                firstBlock = secondBlock;
+            }
+            outBuffer[o++] = encode(message);
+            currentBit += 26;
+        }
+
+        out.write(reinterpret_cast<char*>(outBuffer.data()), sizeof(uint32_t) * outBuffer.size());
+    }
+    in.close();
+    out.close();
+}
+
+void decodeFile(const std::string& input, const std::string& output) {
+    std::ifstream in(input, std::ios::binary);
+    std::ofstream out(output, std::ios::binary);
+
+    if (!in.is_open()) {
+        std::cout << "Unable to open input file" << std::endl;
+        return;
+    }
+    if (!out.is_open()) {
+        std::cout << "Unable to open output file" << std::endl;
+        return;
+    }
+
+    std::array<uint32_t, 16> inBuffer;
+    std::array<uint32_t, 13> outBuffer;
+
+    // Read in 13 32-bit words at a time
+    while (in.read(reinterpret_cast<char*>(inBuffer.data()), sizeof(uint32_t) * inBuffer.size())) {
+        outBuffer.fill(0);
+
+        int currentBit = 0;
+
+        uint64_t i = 0;
+        uint64_t o = 0;
+
+        while(i < inBuffer.size()) {
+            int startBit = currentBit % (sizeof(uint32_t) * __CHAR_BIT__);
+            int endBit = startBit + 26;
+
+            uint32_t message = decode(inBuffer[i]);
+
+            if (endBit < 32) {
+                outBuffer[o] |= message << (6 - startBit);
+            } else {
+                outBuffer[o++] |= message << startBit;
+                outBuffer[o] |= message >> (32 - startBit);
+            }
+            currentBit += 26;
+            i++;
+        }
+
+        out.write(reinterpret_cast<char*>(outBuffer.data()), sizeof(uint32_t) * outBuffer.size());
+    }
+    in.close();
+    out.clear();
+}
+
+
+}  // namespace hamming
 
 void demo() {
     srand(time(0));
 
-    std::cout << "--------------------Demo--------------------" << std::endl << std::endl;
+    std::cout << "--------------------Demo--------------------" << std::endl
+              << std::endl;
 
     uint32_t message = rand() >> ((sizeof(uint32_t) * __CHAR_BIT__) - 26);
     uint32_t expanded = expand(message);
@@ -199,7 +298,8 @@ void speedTest(int power) {
     std::cout << "\n-----------------Speed Test-----------------" << std::endl;
 
     ssize_t len = 1 << power;
-    std::cout << "Testing with " << len / 1e3 << "k integers\n" << std::endl;
+    std::cout << "Testing with " << len / 1e3 << "k integers\n"
+              << std::endl;
 
     std::vector<uint32_t> data(len);
     std::generate(data.begin(), data.end(), []() {
@@ -250,12 +350,10 @@ void speedTest(int power) {
     std::cout << "Corrupted decoding speed: " << sizeof(uint32_t) * len / 1e6 / elapsed.count()
               << " MB/s" << std::endl;
 
-
     std::vector<uint64_t> data64(len);
     std::generate(data64.begin(), data64.end(), []() {
         return ((uint64_t)rand() | (uint64_t)rand() << 32) >> ((sizeof(uint64_t) * __CHAR_BIT__) - 57);
     });
-
 
     // 64 Bit data
 

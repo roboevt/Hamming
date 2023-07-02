@@ -48,6 +48,10 @@ uint64_t encode64(uint64_t message);
 
 uint64_t decode64(uint64_t message);
 
+void encodeFile(const std::string& input, const std::string& output);
+
+void decodeFile(const std::string& input, const std::string& output);
+
 }  // namespace hamming
 
 void demo();
