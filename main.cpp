@@ -7,11 +7,11 @@
 #include "hamming.h"
 
 int main() {
-    hamming::encodeFile("hamming.cpp", "output.ham");
-    std::cout << "Encoded hamming.cpp to output.ham\n";
+    demo();
 
-    hamming::decodeFile("output.ham", "output.txt");
-    std::cout << "Decoded output.ham to output.txt\n";
+    speedTest();
+
+    fileSpeedTest("2mbtest.txt");
 
     return 0;
 }

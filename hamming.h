@@ -58,4 +58,6 @@ void demo();
 
 void speedTest(int power = 20);
 
+void fileSpeedTest(const std::string& input);
+
 #endif  // HAMMING_H

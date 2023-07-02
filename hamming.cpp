@@ -6,6 +6,7 @@
 #include <fstream>
 #include <limits>  // digits
 #include <vector>
+#include <filesystem>
 
 namespace {
 
@@ -422,5 +423,29 @@ void speedTest(int power) {
     elapsed = end - start;
 
     std::cout << "Corrupted decoding speed: " << sizeof(uint64_t) * len / 1e6 / elapsed.count()
+              << " MB/s" << std::endl;
+}
+
+void fileSpeedTest(const std::string& input) {
+    std::cout << "\n---------------File Speed Test--------------" << std::endl;
+
+    int fileSize = std::filesystem::file_size(input);
+    std::cout << "Testing with " << fileSize / 1e6 << " MB file\n"
+              << std::endl;
+
+    auto start = std::chrono::high_resolution_clock::now();
+    hamming::encodeFile(input, "encoded.ham");
+    auto end = std::chrono::high_resolution_clock::now();
+
+    std::chrono::duration<double> elapsed = end - start;
+    std::cout << "Encoding speed: " << fileSize / 1e6 / elapsed.count()
+              << " MB/s" << std::endl;
+
+    start = std::chrono::high_resolution_clock::now();
+    hamming::decodeFile("encoded.ham", "decoded.txt");
+    end = std::chrono::high_resolution_clock::now();
+
+    elapsed = end - start;
+    std::cout << "Decoding speed: " << fileSize / 1e6 / elapsed.count()
               << " MB/s" << std::endl;
 }
