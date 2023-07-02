@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <bit>  // popcnt
+#include <limits> // digits
 #include <chrono>
 #include <fstream>
 #include <vector>
@@ -9,6 +10,7 @@
 namespace {
 
 constexpr uint32_t LOWER_26 = (1 << 26) - 1;
+constexpr uint32_t BITS_32 = std::numeric_limits<uint32_t>::digits;
 
 /// @brief Expand input to leave space for parity bits
 /// @param data An at most 26 bit number
@@ -47,7 +49,7 @@ namespace hamming {
 
 uint32_t check(uint32_t data) {
     uint32_t result = 0;
-    for (uint64_t i = 0; i < sizeof(uint32_t) * __CHAR_BIT__; i++) {
+    for (uint64_t i = 0; i < BITS_32; i++) {
         if (data & 1) {
             result ^= i;
         }
@@ -180,7 +182,7 @@ void encodeFile(const std::string& input, const std::string& output) {
 
         uint32_t firstBlock = inBuffer[i++];
         while(o < outBuffer.size()) {
-            int startBit = currentBit % (sizeof(uint32_t) * __CHAR_BIT__);
+            int startBit = currentBit % BITS_32;
             int endBit = startBit + 26;
 
             uint32_t message;
@@ -194,7 +196,7 @@ void encodeFile(const std::string& input, const std::string& output) {
             outBuffer[o++] = encode(message);
             currentBit += 26;
         }
-
+        
         out.write(reinterpret_cast<char*>(outBuffer.data()), sizeof(uint32_t) * outBuffer.size());
     }
     in.close();
@@ -217,29 +219,29 @@ void decodeFile(const std::string& input, const std::string& output) {
     std::array<uint32_t, 16> inBuffer;
     std::array<uint32_t, 13> outBuffer;
 
-    // Read in 13 32-bit words at a time
+    // Read in 16 32-bit words at a time
     while (in.read(reinterpret_cast<char*>(inBuffer.data()), sizeof(uint32_t) * inBuffer.size())) {
         outBuffer.fill(0);
-
         int currentBit = 0;
 
         uint64_t i = 0;
         uint64_t o = 0;
 
+        // Fill outBuffer with full 32-bit words from 26 bit segments in inBuffer
         while(i < inBuffer.size()) {
-            int startBit = currentBit % (sizeof(uint32_t) * __CHAR_BIT__);
+            int startBit = currentBit % BITS_32;
             int endBit = startBit + 26;
 
-            uint32_t message = decode(inBuffer[i]);
+            uint32_t message = decode(inBuffer[i++]);
 
             if (endBit < 32) {
-                outBuffer[o] |= message << (6 - startBit);
+                outBuffer[o] |= message << startBit;
             } else {
                 outBuffer[o++] |= message << startBit;
                 outBuffer[o] |= message >> (32 - startBit);
             }
+
             currentBit += 26;
-            i++;
         }
 
         out.write(reinterpret_cast<char*>(outBuffer.data()), sizeof(uint32_t) * outBuffer.size());

@@ -1,4 +1,4 @@
-// g++ -std=c++20 -O3 -o hamming hamming.cpp main.cpp
+// g++ -Wall -Wextra -std=c++20 -O3 -o hamming hamming.cpp main.cpp
 
 #include <algorithm>
 #include <chrono>
@@ -10,8 +10,8 @@ int main() {
     hamming::encodeFile("hamming.cpp", "output.ham");
     std::cout << "Encoded hamming.cpp to output.ham\n";
 
-    hamming::decodeFile("output.ham", "output.cpp");
-    std::cout << "Decoded output.ham to output.cpp\n";
+    hamming::decodeFile("output.ham", "output.txt");
+    std::cout << "Decoded output.ham to output.txt\n";
 
     return 0;
 }
