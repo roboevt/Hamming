@@ -11,7 +11,7 @@ int main() {
 
     speedTest();
 
-    fileSpeedTest("2mbtest.txt");
+    fileSpeedTest("32mbtest.txt");
 
     return 0;
 }

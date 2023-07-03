@@ -3,15 +3,24 @@
 #include <algorithm>
 #include <bit>  // popcnt
 #include <chrono>
+#include <filesystem>
 #include <fstream>
 #include <limits>  // digits
 #include <vector>
-#include <filesystem>
+#include <x86intrin.h>  // pext/pdep
+
+constexpr uint32_t LOWER_26 = (1 << 26) - 1;
+constexpr uint64_t LOWER_26L = (1L << 26) - 1;
+constexpr uint32_t BITS_32 = std::numeric_limits<uint32_t>::digits;
 
 namespace {
 
-constexpr uint32_t LOWER_26 = (1 << 26) - 1;
-constexpr uint32_t BITS_32 = std::numeric_limits<uint32_t>::digits;
+template <typename T>
+static std::string toBinaryString(const T& x) {
+    std::stringstream ss;
+    ss << std::bitset<sizeof(T) * 8>(x);
+    return ss.str();
+}
 
 /// @brief Expand input to leave space for parity bits
 /// @param data An at most 26 bit number
@@ -23,10 +32,15 @@ uint32_t expand(uint32_t data) {
     }
     uint32_t result = 0;
 
-    result |= (data & 0b00000000000000000000000001) << 3;
-    result |= (data & 0b00000000000000000000001110) << 4;
-    result |= (data & 0b00000000000000011111110000) << 5;
-    result |= (data & 0b11111111111111100000000000) << 6;
+    // Non pdep version, same functionality
+    // result |= (data & 0b00000000000000000000000001) << 3;
+    // result |= (data & 0b00000000000000000000001110) << 4;
+    // result |= (data & 0b00000000000000011111110000) << 5;
+    // result |= (data & 0b11111111111111100000000000) << 6;
+
+    //See here for an explanation of pdep and pext, they are so perfect for this!
+    //https://youtube.com/clip/UgkxbDhQnTypipk0PC48W513ezrinnu3DAK2
+    result = _pdep_u32(data, 0b11111111111111101111111011101000);
 
     return result;
 }
@@ -34,14 +48,16 @@ uint32_t expand(uint32_t data) {
 /// @brief Remove parity bits and return just the message
 /// @param data Decoded message with parity bits
 /// @return 26 bit original message
-uint32_t compress(uint32_t data) {
+uint32_t compress(const uint32_t data) {
     uint32_t result = 0;
 
-    result |= (data & 0b00000000000000000000000000001000) >> 3;
-    result |= (data & 0b00000000000000000000000011100000) >> 4;
-    result |= (data & 0b00000000000000001111111000000000) >> 5;
-    result |= (data & 0b11111111111111100000000000000000) >> 6;
+    // Non pext version, same functionality
+    // result |= (data & 0b00000000000000000000000000001000) >> 3;
+    // result |= (data & 0b00000000000000000000000011100000) >> 4;
+    // result |= (data & 0b00000000000000001111111000000000) >> 5;
+    // result |= (data & 0b11111111111111100000000000000000) >> 6;
 
+    result = _pext_u32(data, 0b11111111111111101111111011101000);
     return result;
 }
 }  // anonymous namespace
@@ -197,7 +213,8 @@ void encodeFile(const std::string& input, const std::string& output) {
             // Extract next 26-bit message
             uint32_t message;
             if (endBit < 32) {  // message is contained within one 32-bit word
-                message = (firstBlock >> startBit) & LOWER_26;
+                //message = (firstBlock >> startBit) & LOWER_26;
+                message = _pext_u32(firstBlock, LOWER_26 << startBit);
             } else {  // message is split between two 32-bit words
                 uint32_t secondBlock = inBuffer[i++];
                 message = (((firstBlock >> startBit) & LOWER_26) | (secondBlock << (32 - startBit))) & LOWER_26;
@@ -281,6 +298,7 @@ void demo() {
               << std::endl;
 
     uint32_t message = rand() >> ((sizeof(uint32_t) * __CHAR_BIT__) - 26);
+    message = LOWER_26;
     uint32_t expanded = expand(message);
     uint32_t correction = hamming::check(expanded);
     uint32_t encoded = hamming::encode(message);
@@ -429,6 +447,11 @@ void speedTest(int power) {
 void fileSpeedTest(const std::string& input) {
     std::cout << "\n---------------File Speed Test--------------" << std::endl;
 
+    std::filesystem::path inputPath(input);
+    if (!std::filesystem::exists(inputPath)) {
+        std::cout << "File " << input << " does not exist!" << std::endl;
+        return;
+    }
     int fileSize = std::filesystem::file_size(input);
     std::cout << "Testing with " << fileSize / 1e6 << " MB file\n"
               << std::endl;
@@ -442,7 +465,7 @@ void fileSpeedTest(const std::string& input) {
               << " MB/s" << std::endl;
 
     start = std::chrono::high_resolution_clock::now();
-    hamming::decodeFile("encoded.ham", "decoded.txt");
+    hamming::decodeFile("encoded.ham", "output.txt");
     end = std::chrono::high_resolution_clock::now();
 
     elapsed = end - start;

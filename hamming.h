@@ -5,13 +5,6 @@
 #include <iostream>
 #include <sstream>
 
-template <typename T>
-static std::string toBinaryString(const T& x) {
-    std::stringstream ss;
-    ss << std::bitset<sizeof(T) * 8>(x);
-    return ss.str();
-}
-
 namespace hamming {
 /*
 31,26 hamming code (83.9% data)
