@@ -49,6 +49,8 @@ void decodeFile(const std::string& input, const std::string& output);
 
 void demo();
 
+void test();
+
 void speedTest(int power = 20);
 
 void fileSpeedTest(const std::string& input);

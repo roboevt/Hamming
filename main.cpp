@@ -9,6 +9,8 @@
 int main() {
     demo();
 
+    test();
+
     speedTest();
 
     fileSpeedTest("32mbtest.txt");
