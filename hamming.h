@@ -1,9 +1,9 @@
 #ifndef HAMMING_H
 #define HAMMING_H
 
-#include <bitset>
-#include <iostream>
-#include <sstream>
+#include <array>
+#include <cstdint>
+#include <string>
 
 namespace hamming {
 /*
@@ -44,6 +44,10 @@ uint64_t decode64(uint64_t message);
 void encodeFile(const std::string& input, const std::string& output);
 
 void decodeFile(const std::string& input, const std::string& output);
+
+std::array<uint32_t, 16> encodeBuffer(const std::array<uint32_t, 13>& input);
+
+std::array<uint32_t, 13> decodeBuffer(const std::array<uint32_t, 16>& input);
 
 }  // namespace hamming
 
