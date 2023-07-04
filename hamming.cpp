@@ -4,10 +4,13 @@
 
 #include <algorithm>
 #include <bit>  // popcnt
+#include <bitset>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <limits>  // digits
+#include <sstream>
 #include <vector>
 
 constexpr uint32_t LOWER_26 = (1 << 26) - 1;
@@ -110,6 +113,67 @@ uint32_t decode(uint32_t data) {
     return compress(data);
 }
 
+std::array<uint32_t, 16> encodeBuffer(const std::array<uint32_t, 13>& input) {
+    std::array<uint32_t, 16> output;
+
+    int currentBit = 0;
+    uint64_t i = 0;
+    uint64_t o = 0;
+
+    uint32_t firstBlock = input[i++];
+
+    // Fill outBuffer with 16 26-bit words split from inBuffer
+    while (o < output.size()) {
+        int startBit = currentBit % BITS_32;
+
+        // Extract next 26-bit message
+        uint32_t message;
+        if (startBit + 26 < 32) {  // message is contained within one 32-bit word
+            // message = (firstBlock >> startBit) & LOWER_26;
+            message = _pext_u32(firstBlock, LOWER_26 << startBit);
+        } else {  // message is split between two 32-bit words
+            uint32_t secondBlock = input[i++];
+            message = (((firstBlock >> startBit) & LOWER_26) |
+                       (secondBlock << (BITS_32 - startBit))) &
+                      LOWER_26;
+
+            firstBlock = secondBlock;
+        }
+
+        output[o++] = encode(message);
+        currentBit += 26;
+    }
+    return output;
+}
+
+std::array<uint32_t, 13> decodeBuffer(const std::array<uint32_t, 16>& input) {
+    std::array<uint32_t, 13> output;
+    output.fill(0);
+
+    int currentBit = 0;
+    uint64_t i = 0;
+    uint64_t o = 0;
+
+    // Fill outBuffer with full 32-bit words from 26 bit segments in input
+    while (i < input.size()) {
+        int startBit = currentBit % BITS_32;
+        int endBit = startBit + 26;
+
+        uint32_t message = decode(input[i++]);
+
+        // Write next 26 bits of original message to output
+        if (endBit < 32) {  // message will be contained within one 32-bit word
+            output[o] |= message << startBit;
+        } else {  // message will be split between two 32-bit words
+            output[o++] |= message << startBit;
+            output[o] |= message >> (32 - startBit);
+        }
+
+        currentBit += 26;
+    }
+    return output;
+}
+
 void encodeFile(const std::string& input, const std::string& output) {
     std::ifstream in(input, std::ios::binary);
     std::ofstream out(output, std::ios::binary);
@@ -135,31 +199,8 @@ void encodeFile(const std::string& input, const std::string& output) {
         if (in.eof()) {
             continueReading = false;
         }
-        int currentBit = 0;
 
-        uint64_t i = 0;
-        uint64_t o = 0;
-
-        uint32_t firstBlock = inBuffer[i++];
-
-        // Fill outBuffer with 16 26-bit words split from inBuffer
-        while (o < outBuffer.size()) {
-            int startBit = currentBit % BITS_32;
-
-            // Extract next 26-bit message
-            uint32_t message;
-            if (startBit + 26 < 32) {  // message is contained within one 32-bit word
-                // message = (firstBlock >> startBit) & LOWER_26;
-                message = _pext_u32(firstBlock, LOWER_26 << startBit);
-            } else {  // message is split between two 32-bit words
-                uint32_t secondBlock = inBuffer[i++];
-                message = (((firstBlock >> startBit) & LOWER_26) | (secondBlock << (32 - startBit))) & LOWER_26;
-                firstBlock = secondBlock;
-            }
-
-            outBuffer[o++] = encode(message);
-            currentBit += 26;
-        }
+        outBuffer = encodeBuffer(inBuffer);
 
         out.write(reinterpret_cast<char*>(outBuffer.data()), sizeof(uint32_t) * outBuffer.size());
     }
@@ -185,39 +226,18 @@ void decodeFile(const std::string& input, const std::string& output) {
 
     // Read in 16 32-bit words at a time
     while (in.read(reinterpret_cast<char*>(inBuffer.data()), sizeof(uint32_t) * inBuffer.size())) {
-        outBuffer.fill(0);
-        int currentBit = 0;
-
-        uint64_t i = 0;
-        uint64_t o = 0;
-
-        // Fill outBuffer with full 32-bit words from 26 bit segments in inBuffer
-        while (i < inBuffer.size()) {
-            int startBit = currentBit % BITS_32;
-            int endBit = startBit + 26;
-
-            uint32_t message = decode(inBuffer[i++]);
-
-            // Write next 26 bits of original message to outBuffer
-            if (endBit < 32) {  // message will be contained within one 32-bit word
-                outBuffer[o] |= message << startBit;
-            } else {  // message will be split between two 32-bit words
-                outBuffer[o++] |= message << startBit;
-                outBuffer[o] |= message >> (32 - startBit);
-            }
-
-            currentBit += 26;
-        }
+        outBuffer = decodeBuffer(inBuffer);
 
         // Avoid writing 0 bytes at the end of the file
         auto findNonZeroBytes = [](char* array, uint size) {
-            uint i = 1;
+            uint i = 0;
             while (array[i] != 0 && i < size) {
                 i++;
             }
             return i;
         };
-        int nonZeroBytes = findNonZeroBytes(reinterpret_cast<char*>(outBuffer.data()), sizeof(uint32_t) * outBuffer.size());
+        int nonZeroBytes = in.eof() ? findNonZeroBytes(reinterpret_cast<char*>(outBuffer.data()), sizeof(uint32_t) * outBuffer.size())
+                                    : 52;
 
         out.write(reinterpret_cast<char*>(outBuffer.data()), nonZeroBytes);
     }
